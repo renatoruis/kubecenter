@@ -14,7 +14,11 @@ import type { ApplicationListItem } from "@/lib/types";
 
 export function ApplicationsList() {
   const searchParams = useSearchParams();
-  const { data, error, loading } = useApi<ApplicationListItem[]>("/applications");
+  const { data, error, loading } = useApi<ApplicationListItem[]>(
+    "/applications",
+    undefined,
+    { refreshInterval: 30000 },
+  );
   const [namespace, setNamespace] = useState(searchParams.get("namespace") ?? "");
   const [app, setApp] = useState("");
   const [search, setSearch] = useState("");

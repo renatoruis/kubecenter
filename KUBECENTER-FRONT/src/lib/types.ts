@@ -36,6 +36,42 @@ export interface NamespaceSummary {
   runningPods: number;
 }
 
+// Namespace Overview
+export interface NamespaceOverview {
+  name: string;
+  status: string;
+  deployments: {
+    name: string;
+    replicas: number;
+    availableReplicas: number;
+    image: string | null;
+    status: "healthy" | "degraded" | "scaled-down";
+  }[];
+  pods: {
+    total: number;
+    running: number;
+    pending: number;
+    failed: number;
+    succeeded: number;
+  };
+  services: number;
+  ingresses: number;
+  events: {
+    type: string;
+    reason: string;
+    message: string;
+    timestamp: string | null;
+    involvedObject: { kind: string; name: string };
+  }[];
+  resourceUsage: {
+    available: boolean;
+    cpuUsage: string;
+    memoryUsage: string;
+    cpuNanoCores: number;
+    memoryBytes: number;
+  };
+}
+
 // Applications
 export interface ApplicationListItem {
   name: string;
@@ -45,6 +81,24 @@ export interface ApplicationListItem {
   image: string | null;
   services: string[];
   status: "healthy" | "degraded" | "scaled-down";
+}
+
+export interface HpaMetric {
+  type: string;
+  name: string;
+  currentAverageUtilization: number | null;
+  currentAverageValue: string | null;
+  targetAverageUtilization: number | null;
+  targetAverageValue: string | null;
+}
+
+export interface HpaInfo {
+  name: string;
+  minReplicas: number;
+  maxReplicas: number;
+  currentReplicas: number;
+  desiredReplicas: number;
+  metrics: HpaMetric[];
 }
 
 export interface ApplicationDetail {
@@ -62,6 +116,7 @@ export interface ApplicationDetail {
   ingress: Array<{ name?: string; hosts: string[] }>;
   configmaps: string[];
   secrets: string[];
+  hpa?: HpaInfo | null;
 }
 
 export interface ContainerSummary {
@@ -84,6 +139,7 @@ export interface PodListItem {
   node: string | null;
   status: string;
   restartCount: number;
+  startTime: string | null;
   images: string[];
   resources?: Array<{
     container: string;
@@ -298,6 +354,15 @@ export interface PodDescribeResponse {
   }>;
   labels: Record<string, string>;
   annotations: Record<string, string>;
+}
+
+// Revisions
+export interface RevisionItem {
+  revision: number;
+  image: string;
+  createdAt: string;
+  replicas: number;
+  isActive: boolean;
 }
 
 // API Error

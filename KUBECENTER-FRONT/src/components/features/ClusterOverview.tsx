@@ -1,21 +1,134 @@
 "use client";
 
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useApi } from "@/hooks/useApi";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { formatDate } from "@/lib/utils";
+import { timeAgo } from "@/lib/timeAgo";
 import { Boxes, Container, Activity, Network, Server } from "lucide-react";
 import type { ClusterOverview as ClusterOverviewType } from "@/lib/types";
 
-export function ClusterOverview() {
-  const { data, error, loading } = useApi<ClusterOverviewType>("/");
+function HealthScoreRing({ score }: { score: number }) {
+  const radius = 54;
+  const stroke = 8;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
 
-  if (loading) {
+  const color =
+    score >= 80
+      ? "var(--success)"
+      : score >= 60
+        ? "var(--warning)"
+        : "var(--error)";
+
+  const label =
+    score >= 80 ? "Saudável" : score >= 60 ? "Atenção" : "Crítico";
+
+  return (
+    <div className="flex items-center gap-6 rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-card)] px-6 py-5">
+      <div className="relative h-[132px] w-[132px] shrink-0">
+        <svg
+          viewBox="0 0 132 132"
+          className="h-full w-full -rotate-90"
+        >
+          <circle
+            cx="66"
+            cy="66"
+            r={radius}
+            fill="none"
+            stroke="var(--bg-muted)"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx="66"
+            cy="66"
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span
+            className="text-3xl font-bold tabular-nums"
+            style={{ color }}
+          >
+            {score}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            / 100
+          </span>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-[var(--text-primary)]">
+          Health Score
+        </p>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">
+          Índice geral de saúde do cluster calculado a partir de pods, nós e deployments.
+        </p>
+        <Badge
+          variant={score >= 80 ? "success" : score >= 60 ? "warning" : "error"}
+          dot
+          className="mt-2"
+        >
+          {label}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+export function ClusterOverview() {
+  const { data, error, loading, lastUpdated } =
+    useApi<ClusterOverviewType>("/", undefined, { refreshInterval: 30000 });
+
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const healthScore = useMemo(() => {
+    if (!data) return 0;
+    const { totals, namespaces, nodes } = data;
+
+    const podScore = totals.pods > 0 ? (totals.runningPods / totals.pods) * 100 : 100;
+
+    const nodeScore = nodes.total > 0 ? (nodes.ready / nodes.total) * 100 : 100;
+
+    let totalDeploys = 0;
+    let healthyDeploys = 0;
+    for (const ns of namespaces) {
+      totalDeploys += ns.deployments;
+      if (ns.pods > 0 && ns.runningPods === ns.pods) {
+        healthyDeploys += ns.deployments;
+      } else if (ns.pods > 0) {
+        healthyDeploys += ns.deployments * (ns.runningPods / ns.pods);
+      } else {
+        healthyDeploys += ns.deployments;
+      }
+    }
+    const deployScore = totalDeploys > 0 ? (healthyDeploys / totalDeploys) * 100 : 100;
+
+    const baseScore = 100;
+
+    return Math.round(
+      podScore * 0.4 + nodeScore * 0.2 + deployScore * 0.2 + baseScore * 0.2,
+    );
+  }, [data]);
+
+  if (loading && !data) {
     return (
       <div className="space-y-6">
+        <Skeleton className="h-36 rounded-[var(--radius-xl)]" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-28 rounded-[var(--radius-xl)]" />
@@ -44,6 +157,8 @@ export function ClusterOverview() {
 
   return (
     <div className="space-y-6">
+      <HealthScoreRing score={healthScore} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Deployments"
@@ -159,9 +274,20 @@ export function ClusterOverview() {
         </Card>
       </div>
 
-      <p className="text-xs text-[var(--text-muted)]">
-        Atualizado em {formatDate(collectedAt)}
-      </p>
+      <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+        <span title={collectedAt}>
+          Coletado {timeAgo(collectedAt)}
+        </span>
+        {lastUpdated && (
+          <>
+            <span>&middot;</span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--success)] animate-pulse" />
+              Atualizado {timeAgo(lastUpdated)}
+            </span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

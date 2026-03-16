@@ -98,6 +98,11 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
             description: "Streaming contínuo de logs",
             example: false,
           },
+          previous: {
+            type: "boolean",
+            description: "Retornar logs do container anterior (crashado)",
+            example: false,
+          },
         },
       },
       response: {
@@ -134,6 +139,7 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
       sinceSeconds: parseOptionalNumber(request.query.sinceSeconds, "sinceSeconds"),
       timestamps: parseOptionalBoolean(request.query.timestamps),
       follow: parseOptionalBoolean(request.query.follow),
+      previous: parseOptionalBoolean(request.query.previous),
     });
   });
 };

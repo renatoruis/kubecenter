@@ -66,6 +66,7 @@ export const listPods = async ({ namespace, app }: ListPodsFilters) => {
         images: (pod.spec?.containers ?? [])
           .map((container) => container.image)
           .filter((image): image is string => Boolean(image)),
+        startTime: pod.status?.startTime?.toISOString?.() ?? null,
         resources: (pod.spec?.containers ?? []).map((container) => ({
           container: container.name,
           requests: container.resources?.requests ?? {},

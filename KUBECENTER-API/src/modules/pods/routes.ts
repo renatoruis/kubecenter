@@ -18,6 +18,7 @@ const podItemSchema = {
     node: { type: "string", nullable: true, example: "hz-dev-server-2" },
     status: { type: "string", example: "Running" },
     restartCount: { type: "number", example: 0 },
+    startTime: { type: "string", nullable: true, example: "2025-01-01T00:00:00.000Z" },
     images: { type: "array", items: { type: "string" }, example: ["company/payments-api:v2.1.3"] },
     resources: {
       type: "array",

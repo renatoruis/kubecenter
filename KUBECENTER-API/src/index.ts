@@ -14,6 +14,7 @@ import databasesRoutes from "./modules/databases/routes";
 import metricsRoutes from "./modules/metrics/routes";
 import networkRoutes from "./modules/network/routes";
 import eventsRoutes from "./modules/events/routes";
+import resourcesRoutes from "./modules/resources/routes";
 
 async function registerModules(app: FastifyInstance): Promise<void> {
   await app.register(clusterRoutes);
@@ -26,6 +27,7 @@ async function registerModules(app: FastifyInstance): Promise<void> {
   await app.register(metricsRoutes);
   await app.register(networkRoutes);
   await app.register(eventsRoutes);
+  await app.register(resourcesRoutes);
 }
 
 async function bootstrap(): Promise<void> {

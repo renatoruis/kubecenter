@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Globe, Network } from "lucide-react";
+import { YamlViewerModal } from "@/components/ui/YamlViewerModal";
+import { Globe, Network, Code } from "lucide-react";
 import type { NetworkResponse } from "@/lib/types";
 
 interface ApplicationNetworkTabProps {
@@ -14,6 +16,7 @@ interface ApplicationNetworkTabProps {
 }
 
 export function ApplicationNetworkTab({ namespace, app }: ApplicationNetworkTabProps) {
+  const [yamlModal, setYamlModal] = useState<{ kind: string; name: string } | null>(null);
   const { data, error, loading } = useApi<NetworkResponse>(
     `/network/${namespace}/${app}`,
   );
@@ -49,6 +52,15 @@ export function ApplicationNetworkTab({ namespace, app }: ApplicationNetworkTabP
                     {svc.name || "—"}
                   </span>
                   {svc.type && <Badge variant="default">{svc.type}</Badge>}
+                  {svc.name && (
+                    <button
+                      onClick={() => setYamlModal({ kind: "service", name: svc.name! })}
+                      className="rounded-[var(--radius-md)] p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-700/50"
+                      title="Ver YAML"
+                    >
+                      <Code className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
                 {svc.clusterIP && (
                   <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">
@@ -90,6 +102,15 @@ export function ApplicationNetworkTab({ namespace, app }: ApplicationNetworkTabP
                   {ing.className && (
                     <Badge variant="default">{ing.className}</Badge>
                   )}
+                  {ing.name && (
+                    <button
+                      onClick={() => setYamlModal({ kind: "ingress", name: ing.name! })}
+                      className="rounded-[var(--radius-md)] p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-700/50"
+                      title="Ver YAML"
+                    >
+                      <Code className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {ing.hosts.map((h) => (
@@ -101,6 +122,14 @@ export function ApplicationNetworkTab({ namespace, app }: ApplicationNetworkTabP
           </div>
         )}
       </Card>
+
+      <YamlViewerModal
+        isOpen={yamlModal !== null}
+        onClose={() => setYamlModal(null)}
+        kind={yamlModal?.kind ?? ""}
+        namespace={namespace}
+        name={yamlModal?.name ?? ""}
+      />
     </div>
   );
 }

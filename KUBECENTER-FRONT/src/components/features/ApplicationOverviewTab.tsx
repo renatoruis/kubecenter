@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { YamlViewerModal } from "@/components/ui/YamlViewerModal";
+import { timeAgo } from "@/lib/timeAgo";
 import {
   Repeat,
   Box,
@@ -13,13 +16,15 @@ import {
   KeyRound,
   Network,
   ArrowRight,
+  ArrowUpDown,
   Container,
   Cpu,
   MemoryStick,
-  AlertTriangle,
   Clock,
+  GitBranch,
+  Code,
 } from "lucide-react";
-import type { ApplicationDetail as ApplicationDetailType, MetricsResponse, PodListItem } from "@/lib/types";
+import type { ApplicationDetail as ApplicationDetailType, HpaInfo, MetricsResponse, PodListItem, RevisionItem } from "@/lib/types";
 import { formatMemory, nanoCoresToMillicores } from "@/lib/utils";
 
 interface ApplicationOverviewTabProps {
@@ -56,16 +61,14 @@ function parseMemoryMi(val?: string): number | null {
   return parseInt(val) / (1024 * 1024);
 }
 
-function timeAgo(ts: string | null): string {
-  if (!ts) return "—";
-  const diff = Date.now() - new Date(ts).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "agora";
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
+function getResourceColor(usage: number, limit: number | null | undefined): string {
+  if (limit == null || limit <= 0) return "bg-emerald-500";
+  const pct = (usage / limit) * 100;
+  if (pct >= 95) return "bg-red-500";
+  if (pct >= 80) return "bg-amber-500";
+  return "bg-emerald-500";
 }
+
 
 function UsageBar({
   label,
@@ -73,19 +76,18 @@ function UsageBar({
   request,
   limit,
   unit,
-  color,
 }: {
   label: string;
   used: number;
   request: number | null;
   limit: number | null;
   unit: string;
-  color: string;
 }) {
   const max = limit ?? request ?? used * 1.5;
   const usedPct = max > 0 ? Math.min((used / max) * 100, 100) : 0;
   const reqPct = request && max > 0 ? Math.min((request / max) * 100, 100) : null;
-  const isOverLimit = limit ? used > limit : false;
+  const barColor = getResourceColor(used, limit);
+  const isRed = limit != null && limit > 0 && (used / limit) * 100 >= 95;
 
   return (
     <div className="space-y-1.5">
@@ -99,7 +101,7 @@ function UsageBar({
       </div>
       <div className="relative h-3 w-full rounded-full bg-slate-800 overflow-hidden">
         <div
-          className={`h-full rounded-full ${isOverLimit ? "bg-red-500" : color}`}
+          className={`h-full rounded-full ${barColor}${isRed ? " animate-pulse" : ""}`}
           style={{ width: `${usedPct}%` }}
         />
         {reqPct != null && (
@@ -172,12 +174,95 @@ function Connector() {
   );
 }
 
+function HpaSection({ hpa }: { hpa: HpaInfo }) {
+  const range = hpa.maxReplicas - hpa.minReplicas;
+  const currentPct = range > 0 ? ((hpa.currentReplicas - hpa.minReplicas) / range) * 100 : 0;
+  const desiredPct = range > 0 ? ((hpa.desiredReplicas - hpa.minReplicas) / range) * 100 : 0;
+
+  return (
+    <Card title="Autoscaling (HPA)" icon={<ArrowUpDown className="h-4 w-4" />}>
+      <div className="space-y-5">
+        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+          <span className="font-mono">{hpa.name}</span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-[var(--text-secondary)]">Réplicas</span>
+            <span className="tabular-nums text-[var(--text-muted)]">
+              {hpa.minReplicas} → <span className="text-[var(--text-primary)] font-semibold">{hpa.currentReplicas}</span> → {hpa.maxReplicas}
+            </span>
+          </div>
+          <div className="relative h-3 w-full rounded-full bg-slate-800 overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-blue-500/20"
+              style={{ width: `${Math.min(Math.max(desiredPct, 0), 100)}%` }}
+            />
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-blue-500"
+              style={{ width: `${Math.min(Math.max(currentPct, 0), 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
+            <span>Min: {hpa.minReplicas}</span>
+            <span>Atual: {hpa.currentReplicas} · Desejado: {hpa.desiredReplicas}</span>
+            <span>Max: {hpa.maxReplicas}</span>
+          </div>
+        </div>
+
+        {hpa.metrics.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {hpa.metrics.map((m, idx) => {
+              const label = m.name ? m.name.toUpperCase() : m.type;
+              const currentVal = m.currentAverageUtilization;
+              const targetVal = m.targetAverageUtilization;
+              const pct = targetVal && targetVal > 0 && currentVal != null
+                ? Math.min((currentVal / targetVal) * 100, 100)
+                : 0;
+              const barColor = currentVal != null && targetVal != null && currentVal >= targetVal
+                ? "bg-amber-500"
+                : "bg-emerald-500";
+
+              return (
+                <div key={idx} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[var(--text-secondary)]">{label}</span>
+                    <span className="tabular-nums text-[var(--text-muted)]">
+                      {currentVal != null ? `${currentVal}%` : (m.currentAverageValue ?? "—")}
+                      {" / "}
+                      {targetVal != null ? `${targetVal}%` : (m.targetAverageValue ?? "—")}
+                    </span>
+                  </div>
+                  {targetVal != null && (
+                    <div className="relative h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${barColor}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  )}
+                  <div className="flex gap-4 text-[10px] text-[var(--text-muted)]">
+                    <span>Atual: {currentVal != null ? `${currentVal}%` : (m.currentAverageValue ?? "—")}</span>
+                    <span>Meta: {targetVal != null ? `${targetVal}%` : (m.targetAverageValue ?? "—")}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverviewTabProps) {
   const { deployment, containers, services, ingress, configmaps, secrets, namespace, name } = detail;
+  const [yamlModal, setYamlModal] = useState<{ kind: string; name: string } | null>(null);
 
   const { data: metrics } = useApi<MetricsResponse>(`/metrics/${namespace}/${name}`);
   const { data: events } = useApi<EventsResponse>(`/events/${namespace}/${name}`);
   const { data: pods } = useApi<PodListItem[]>(`/pods/${namespace}/${name}`);
+  const { data: revisions } = useApi<RevisionItem[]>(`/applications/${namespace}/${name}/revisions`);
 
   const ingressHosts = ingress.flatMap((i) => i.hosts);
   const ingressNames = ingress.map((i) => i.name ?? "—");
@@ -240,6 +325,13 @@ export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverv
               <div className="flex items-center gap-2 mb-1.5">
                 <Repeat className="h-4 w-4 text-blue-400" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">Deployment</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setYamlModal({ kind: "deployment", name }); }}
+                  className="ml-auto rounded-[var(--radius-md)] p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-700/50"
+                  title="Ver YAML"
+                >
+                  <Code className="h-3.5 w-3.5" />
+                </button>
               </div>
               <p className="text-lg font-bold text-[var(--text-primary)] tabular-nums">
                 {deployment.availableReplicas}/{deployment.replicas}
@@ -296,6 +388,8 @@ export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverv
         </div>
       </Card>
 
+      {detail.hpa && <HpaSection hpa={detail.hpa} />}
+
       {/* Resource Usage */}
       <Card title="Consumo de Recursos" icon={<Cpu className="h-4 w-4" />}>
         {metrics ? (
@@ -306,7 +400,6 @@ export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverv
               request={cpuReqM}
               limit={cpuLimM}
               unit="m"
-              color="bg-amber-500"
             />
             <UsageBar
               label="Memory"
@@ -314,7 +407,6 @@ export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverv
               request={memReqMi}
               limit={memLimMi}
               unit="Mi"
-              color="bg-blue-500"
             />
           </div>
         ) : (
@@ -363,13 +455,57 @@ export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverv
                         {ev.message}
                       </td>
                       <td className="px-4 py-2.5 text-xs tabular-nums text-[var(--text-muted)]">
-                        {timeAgo(ev.lastTimestamp ?? ev.firstTimestamp)}
+                        <span title={ev.lastTimestamp ?? ev.firstTimestamp ?? ""}>
+                          {timeAgo(ev.lastTimestamp ?? ev.firstTimestamp)}
+                        </span>
                       </td>
                       <td className="px-4 py-2.5 text-xs tabular-nums text-[var(--text-muted)]">{ev.count}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )
+        ) : (
+          <Skeleton className="h-32 rounded-[var(--radius-md)]" />
+        )}
+      </Card>
+
+      {/* Revision History */}
+      <Card title="Histórico de Revisões" icon={<GitBranch className="h-4 w-4" />}>
+        {revisions ? (
+          revisions.length === 0 ? (
+            <EmptyState title="Sem histórico" description="Nenhuma revisão encontrada para este deployment." />
+          ) : (
+            <div className="relative pl-6">
+              <div className="absolute left-[9px] top-2 bottom-2 w-px bg-slate-700" />
+              {revisions.slice(0, 10).map((rev, idx) => (
+                <div key={rev.revision} className="relative flex items-start gap-4 pb-5 last:pb-0">
+                  <div
+                    className={`absolute left-[-15px] top-1.5 h-2.5 w-2.5 rounded-full border-2 ${
+                      rev.isActive
+                        ? "border-emerald-400 bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]"
+                        : "border-slate-600 bg-slate-900"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold tabular-nums text-[var(--text-primary)]">
+                        #{rev.revision}
+                      </span>
+                      {rev.isActive && (
+                        <Badge variant="success" dot>Ativo</Badge>
+                      )}
+                      <span className="ml-auto text-xs tabular-nums text-[var(--text-muted)]">
+                        {timeAgo(rev.createdAt)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)] truncate" title={rev.image}>
+                      {rev.image}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           )
         ) : (
@@ -413,6 +549,14 @@ export function ApplicationOverviewTab({ detail, onTabChange }: ApplicationOverv
           ))}
         </div>
       </Card>
+
+      <YamlViewerModal
+        isOpen={yamlModal !== null}
+        onClose={() => setYamlModal(null)}
+        kind={yamlModal?.kind ?? ""}
+        namespace={namespace}
+        name={yamlModal?.name ?? ""}
+      />
     </div>
   );
 }

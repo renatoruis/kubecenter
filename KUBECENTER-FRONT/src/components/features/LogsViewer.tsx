@@ -5,7 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { RefreshCw, Terminal, Play, Pause, Search } from "lucide-react";
+import { RefreshCw, Terminal, Play, Pause, Search, History } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import type { PodListItem, LogsResponse, DeploymentLogsResponse } from "@/lib/types";
 
@@ -26,6 +26,7 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [liveTail, setLiveTail] = useState(true);
+  const [previousLogs, setPreviousLogs] = useState(false);
   const [filter, setFilter] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -51,16 +52,18 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
   const fetchPodLogs = useCallback(async () => {
     if (!selectedPod || !selectedContainer) return;
     try {
+      const params: Record<string, string | number | boolean | undefined> = { tailLines, timestamps: false };
+      if (previousLogs) params.previous = true;
       const res = await apiGet<LogsResponse>(
         `/logs/${namespace}/${selectedPod}/${selectedContainer}`,
-        { tailLines, timestamps: false },
+        params,
       );
       setLogs(res.content);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar logs");
     }
-  }, [namespace, selectedPod, selectedContainer, tailLines]);
+  }, [namespace, selectedPod, selectedContainer, tailLines, previousLogs]);
 
   const fetchLogs = useCallback(async () => {
     if (viewMode === "deployment") {
@@ -94,7 +97,7 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
       intervalRef.current = null;
     }
 
-    if (!liveTail) return;
+    if (!liveTail || previousLogs) return;
 
     const canPoll =
       viewMode === "deployment" || (viewMode === "pod" && selectedPod && selectedContainer);
@@ -111,7 +114,7 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
         intervalRef.current = null;
       }
     };
-  }, [liveTail, viewMode, selectedPod, selectedContainer, fetchLogs]);
+  }, [liveTail, previousLogs, viewMode, selectedPod, selectedContainer, fetchLogs]);
 
   useEffect(() => {
     if (autoScroll && logContainerRef.current) {
@@ -167,7 +170,13 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
             { value: "pod", label: "Pod / Container" },
           ]}
           value={viewMode}
-          onChange={(v) => setViewMode(v as ViewMode)}
+          onChange={(v) => {
+            setViewMode(v as ViewMode);
+            if (v === "deployment") {
+              setPreviousLogs(false);
+              setLiveTail(true);
+            }
+          }}
         />
 
         {viewMode === "pod" && (
@@ -205,13 +214,32 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
         />
 
         <div className="flex items-end gap-2">
+          {viewMode === "pod" && (
+            <Button
+              variant={previousLogs ? "primary" : "secondary"}
+              size="sm"
+              icon={<History className="h-3.5 w-3.5" />}
+              onClick={() => {
+                setPreviousLogs((v) => {
+                  if (!v) setLiveTail(false);
+                  return !v;
+                });
+              }}
+            >
+              Logs Anteriores
+            </Button>
+          )}
           <Button
-            variant={liveTail ? "primary" : "secondary"}
+            variant={liveTail && !previousLogs ? "primary" : "secondary"}
             size="sm"
-            icon={liveTail ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            onClick={() => setLiveTail((v) => !v)}
+            icon={liveTail && !previousLogs ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            onClick={() => {
+              if (previousLogs) return;
+              setLiveTail((v) => !v);
+            }}
+            disabled={previousLogs}
           >
-            {liveTail ? "Pausar" : "Retomar"}
+            {liveTail && !previousLogs ? "Pausar" : "Retomar"}
           </Button>
           <Button
             variant="secondary"
@@ -231,7 +259,15 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-[var(--radius-xl)] border border-slate-800">
+      <div className={`overflow-hidden rounded-[var(--radius-xl)] border ${previousLogs ? "border-amber-500/30" : "border-slate-800"}`}>
+        {previousLogs && (
+          <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
+            <History className="h-3.5 w-3.5 text-amber-400" />
+            <span className="text-xs font-medium text-amber-400">
+              Visualizando logs do container anterior (crashado)
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/80 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <Terminal className="h-4 w-4 text-[var(--text-muted)]" />
@@ -242,7 +278,7 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
                   ? `${selectedPod} / ${selectedContainer}`
                   : "Selecione pod e container"}
             </span>
-            {liveTail && (
+            {liveTail && !previousLogs && (
               <span className="flex items-center gap-1.5 ml-2">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -268,7 +304,7 @@ export function LogsViewer({ namespace, app }: LogsViewerProps) {
         <div
           ref={logContainerRef}
           onScroll={handleScroll}
-          className="max-h-[600px] overflow-y-auto bg-[#0c0e14] p-4 font-mono text-xs leading-relaxed text-slate-300"
+          className={`max-h-[600px] overflow-y-auto p-4 font-mono text-xs leading-relaxed text-slate-300 ${previousLogs ? "bg-[#14120c]" : "bg-[#0c0e14]"}`}
         >
           <pre className="whitespace-pre-wrap break-words">
             {displayLogs ??

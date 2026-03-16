@@ -2,6 +2,7 @@ import type k8s from "@kubernetes/client-node";
 import {
   appsApi,
   assertNamespaceAllowed,
+  autoscalingApi,
   coreApi,
   notFoundError,
   networkingApi,
@@ -111,6 +112,63 @@ const summarizeContainers = (podSpec?: k8s.V1PodSpec) =>
     },
   }));
 
+type RevisionItem = {
+  revision: number;
+  image: string;
+  createdAt: string;
+  replicas: number;
+  isActive: boolean;
+};
+
+export const getDeploymentRevisions = async (
+  namespace: string,
+  app: string,
+): Promise<RevisionItem[]> => {
+  assertNamespaceAllowed(namespace);
+
+  const deployment = await appsApi
+    .readNamespacedDeployment({ name: app, namespace })
+    .catch((error: { statusCode?: number }) => {
+      if (error?.statusCode === 404) {
+        throw notFoundError("Deployment", { namespace, app });
+      }
+      throw error;
+    });
+
+  const deploymentName = deployment.metadata?.name;
+  if (!deploymentName) return [];
+
+  const rsResult = await appsApi.listNamespacedReplicaSet({ namespace });
+
+  const owned = (rsResult.items ?? []).filter((rs) =>
+    (rs.metadata?.ownerReferences ?? []).some(
+      (ref) => ref.kind === "Deployment" && ref.name === deploymentName,
+    ),
+  );
+
+  const revisions: RevisionItem[] = owned
+    .map((rs) => {
+      const rev = parseInt(
+        rs.metadata?.annotations?.["deployment.kubernetes.io/revision"] ?? "0",
+        10,
+      );
+      const images = (rs.spec?.template?.spec?.containers ?? [])
+        .map((c) => c.image)
+        .filter((img): img is string => Boolean(img));
+
+      return {
+        revision: rev,
+        image: images.join(", "),
+        createdAt: rs.metadata?.creationTimestamp?.toISOString() ?? "",
+        replicas: rs.status?.replicas ?? 0,
+        isActive: (rs.status?.replicas ?? 0) > 0,
+      };
+    })
+    .sort((a, b) => b.revision - a.revision);
+
+  return revisions;
+};
+
 export const getApplicationDetail = async (
   namespace: string,
   app: string,
@@ -163,6 +221,49 @@ export const getApplicationDetail = async (
 
   const refs = extractWorkloadRefs(deployment.spec?.template?.spec);
 
+  const hpaList = await autoscalingApi
+    .listNamespacedHorizontalPodAutoscaler({ namespace })
+    .catch(() => ({ items: [] as k8s.V2HorizontalPodAutoscaler[] }));
+
+  const matchingHpa = (hpaList.items ?? []).find(
+    (h) =>
+      h.spec?.scaleTargetRef?.name === app &&
+      h.spec?.scaleTargetRef?.kind === "Deployment",
+  );
+
+  const hpa = matchingHpa
+    ? {
+        name: matchingHpa.metadata?.name ?? "",
+        minReplicas: matchingHpa.spec?.minReplicas ?? 1,
+        maxReplicas: matchingHpa.spec?.maxReplicas ?? 0,
+        currentReplicas: matchingHpa.status?.currentReplicas ?? 0,
+        desiredReplicas: matchingHpa.status?.desiredReplicas ?? 0,
+        metrics: (matchingHpa.status?.currentMetrics ?? []).map((m) => {
+          if (m.type === "Resource" && m.resource) {
+            const targetSpec = (matchingHpa.spec?.metrics ?? []).find(
+              (s) => s.type === "Resource" && s.resource?.name === m.resource!.name,
+            );
+            return {
+              type: "Resource" as const,
+              name: m.resource.name ?? "",
+              currentAverageUtilization: m.resource.current?.averageUtilization ?? null,
+              currentAverageValue: m.resource.current?.averageValue ?? null,
+              targetAverageUtilization: targetSpec?.resource?.target?.averageUtilization ?? null,
+              targetAverageValue: targetSpec?.resource?.target?.averageValue ?? null,
+            };
+          }
+          return {
+            type: m.type ?? "Unknown",
+            name: "",
+            currentAverageUtilization: null,
+            currentAverageValue: null,
+            targetAverageUtilization: null,
+            targetAverageValue: null,
+          };
+        }),
+      }
+    : null;
+
   return {
     name: deployment.metadata?.name,
     namespace: deployment.metadata?.namespace,
@@ -178,5 +279,6 @@ export const getApplicationDetail = async (
     ingress,
     configmaps: Array.from(refs.configMaps),
     secrets: Array.from(refs.secrets),
+    hpa,
   };
 };

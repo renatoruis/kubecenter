@@ -1,5 +1,6 @@
 import {
   AppsV1Api,
+  AutoscalingV2Api,
   CoreV1Api,
   CustomObjectsApi,
   KubeConfig,
@@ -11,6 +12,7 @@ import { AppError } from "./errors";
 export interface K8sClients {
   coreV1: CoreV1Api;
   appsV1: AppsV1Api;
+  autoscalingV2: AutoscalingV2Api;
   networkingV1: NetworkingV1Api;
   customObjects: CustomObjectsApi;
 }
@@ -58,6 +60,7 @@ export function createK8sClients(): K8sClients {
   return {
     coreV1: kc.makeApiClient(CoreV1Api),
     appsV1: kc.makeApiClient(AppsV1Api),
+    autoscalingV2: kc.makeApiClient(AutoscalingV2Api),
     networkingV1: kc.makeApiClient(NetworkingV1Api),
     customObjects: kc.makeApiClient(CustomObjectsApi),
   };
@@ -66,6 +69,7 @@ export function createK8sClients(): K8sClients {
 const clients = createK8sClients();
 export const coreApi = clients.coreV1;
 export const appsApi = clients.appsV1;
+export const autoscalingApi = clients.autoscalingV2;
 export const networkingApi = clients.networkingV1;
 export const customObjectsApi = clients.customObjects;
 

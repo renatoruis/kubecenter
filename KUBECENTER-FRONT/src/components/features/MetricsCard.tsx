@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatMemory, nanoCoresToMillicores } from "@/lib/utils";
-import { Cpu, MemoryStick, Container, Gauge } from "lucide-react";
+import { Cpu, MemoryStick, Container, Gauge, AlertTriangle } from "lucide-react";
 import type { MetricsResponse } from "@/lib/types";
 
 interface MetricsCardProps {
@@ -31,16 +31,25 @@ function parseMemoryMi(val?: string): number | null {
   return parseInt(val) / (1024 * 1024);
 }
 
-function barColor(pct: number): string {
-  if (pct >= 90) return "bg-red-500";
-  if (pct >= 70) return "bg-amber-500";
+function getResourceColor(usage: number, limit: number | null | undefined): string {
+  if (limit == null || limit <= 0) return "bg-emerald-500";
+  const pct = (usage / limit) * 100;
+  if (pct >= 95) return "bg-red-500";
+  if (pct >= 80) return "bg-amber-500";
   return "bg-emerald-500";
 }
 
-function barColorText(pct: number): string {
-  if (pct >= 90) return "text-red-400";
-  if (pct >= 70) return "text-amber-400";
+function getResourceColorText(usage: number, limit: number | null | undefined): string {
+  if (limit == null || limit <= 0) return "text-emerald-400";
+  const pct = (usage / limit) * 100;
+  if (pct >= 95) return "text-red-400";
+  if (pct >= 80) return "text-amber-400";
   return "text-emerald-400";
+}
+
+function isResourceWarning(usage: number, limit: number | null | undefined): boolean {
+  if (limit == null || limit <= 0) return false;
+  return (usage / limit) * 100 >= 80;
 }
 
 export function MetricsCard({ namespace, app }: MetricsCardProps) {
@@ -154,11 +163,13 @@ export function MetricsCard({ namespace, app }: MetricsCardProps) {
               const podMemReqMi = parseMemoryMi(p.requests?.memory) ?? parseMemoryMi(spec?.requests?.memory);
               const podMemMax = podMemLimMi ?? podMemReqMi ?? podMemMi * 1.5;
               const podMemPct = podMemMax > 0 ? Math.min(Math.round((podMemMi / podMemMax) * 100), 100) : 0;
+              const showWarning = isResourceWarning(podCpuM, podCpuLimM) || isResourceWarning(podMemMi, podMemLimMi);
 
               return (
                 <div key={p.pod} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-4">
-                  <p className="font-mono text-xs text-[var(--text-primary)] mb-3 truncate" title={p.pod}>
+                  <p className="font-mono text-xs text-[var(--text-primary)] mb-3 truncate flex items-center gap-1.5" title={p.pod}>
                     {p.pod}
+                    {showWarning && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />}
                   </p>
                   <div className="grid gap-4 sm:grid-cols-2">
                     {/* CPU */}
@@ -167,12 +178,12 @@ export function MetricsCard({ namespace, app }: MetricsCardProps) {
                         <span className="flex items-center gap-1.5 text-[var(--text-muted)]">
                           <Cpu className="h-3 w-3" /> CPU
                         </span>
-                        <span className={`font-semibold tabular-nums ${barColorText(podCpuPct)}`}>
+                        <span className={`font-semibold tabular-nums ${getResourceColorText(podCpuM, podCpuLimM)}`}>
                           {podCpuM}m {podCpuLimM ? `/ ${podCpuLimM}m` : ""} ({podCpuPct}%)
                         </span>
                       </div>
                       <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                        <div className={`h-full rounded-full ${barColor(podCpuPct)}`} style={{ width: `${podCpuPct}%` }} />
+                        <div className={`h-full rounded-full ${getResourceColor(podCpuM, podCpuLimM)}`} style={{ width: `${podCpuPct}%` }} />
                       </div>
                       <div className="flex gap-3 text-[10px] text-[var(--text-muted)]">
                         {podCpuReqM != null && (
@@ -196,12 +207,12 @@ export function MetricsCard({ namespace, app }: MetricsCardProps) {
                         <span className="flex items-center gap-1.5 text-[var(--text-muted)]">
                           <MemoryStick className="h-3 w-3" /> Memory
                         </span>
-                        <span className={`font-semibold tabular-nums ${barColorText(podMemPct)}`}>
+                        <span className={`font-semibold tabular-nums ${getResourceColorText(podMemMi, podMemLimMi)}`}>
                           {formatMemory(p.memoryBytes)} {podMemLimMi ? `/ ${Math.round(podMemLimMi)}Mi` : ""} ({podMemPct}%)
                         </span>
                       </div>
                       <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                        <div className={`h-full rounded-full ${barColor(podMemPct)}`} style={{ width: `${podMemPct}%` }} />
+                        <div className={`h-full rounded-full ${getResourceColor(podMemMi, podMemLimMi)}`} style={{ width: `${podMemPct}%` }} />
                       </div>
                       <div className="flex gap-3 text-[10px] text-[var(--text-muted)]">
                         {podMemReqMi != null && (

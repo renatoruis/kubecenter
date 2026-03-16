@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { AppError } from "../../lib/k8s";
-import { getApplicationDetail, listApplications } from "./service";
+import { getApplicationDetail, getDeploymentRevisions, listApplications } from "./service";
 
 const nsAppParams = {
   type: "object",
@@ -82,6 +82,31 @@ const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
             ingress: { type: "array", items: { type: "object", additionalProperties: true } },
             configmaps: { type: "array", items: { type: "string" } },
             secrets: { type: "array", items: { type: "string" } },
+            hpa: {
+              type: "object",
+              nullable: true,
+              properties: {
+                name: { type: "string" },
+                minReplicas: { type: "number" },
+                maxReplicas: { type: "number" },
+                currentReplicas: { type: "number" },
+                desiredReplicas: { type: "number" },
+                metrics: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: { type: "string" },
+                      name: { type: "string" },
+                      currentAverageUtilization: { type: "number", nullable: true },
+                      currentAverageValue: { type: "string", nullable: true },
+                      targetAverageUtilization: { type: "number", nullable: true },
+                      targetAverageValue: { type: "string", nullable: true },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         403: { $ref: "HttpError#" },
@@ -91,6 +116,40 @@ const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request: any, reply) => {
     try {
       return await getApplicationDetail(request.params.namespace, request.params.app);
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  fastify.get("/applications/:namespace/:app/revisions", {
+    schema: {
+      tags: ["Applications"],
+      summary: "Histórico de revisões de um Deployment",
+      description:
+        "Retorna a lista de ReplicaSets (revisões) vinculados ao Deployment, ordenados da mais recente para a mais antiga.",
+      params: nsAppParams,
+      response: {
+        200: {
+          description: "Lista de revisões",
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              revision: { type: "number", example: 5 },
+              image: { type: "string", example: "company/api:v2.1.3" },
+              createdAt: { type: "string", example: "2025-06-01T12:00:00Z" },
+              replicas: { type: "number", example: 3 },
+              isActive: { type: "boolean", example: true },
+            },
+          },
+        },
+        403: { $ref: "HttpError#" },
+        404: { $ref: "HttpError#" },
+      },
+    },
+  }, async (request: any, reply) => {
+    try {
+      return await getDeploymentRevisions(request.params.namespace, request.params.app);
     } catch (error) {
       return sendError(reply, error);
     }

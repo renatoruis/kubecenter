@@ -10,6 +10,7 @@ export interface PodLogRequest {
   sinceSeconds?: number;
   timestamps?: boolean;
   follow?: boolean;
+  previous?: boolean;
 }
 
 export interface PodLogResponse {
@@ -74,6 +75,7 @@ export function parseOptionalBoolean(value: unknown): boolean | undefined {
 export async function getPodLogs(request: PodLogRequest): Promise<PodLogResponse> {
   const timestamps = request.timestamps ?? false;
   const follow = request.follow ?? false;
+  const previous = request.previous ?? false;
   assertNamespaceAllowed(request.namespace);
 
   try {
@@ -82,6 +84,7 @@ export async function getPodLogs(request: PodLogRequest): Promise<PodLogResponse
       name: request.pod,
       container: request.container,
       follow,
+      previous,
       sinceSeconds: request.sinceSeconds,
       tailLines: request.tailLines,
       timestamps,
