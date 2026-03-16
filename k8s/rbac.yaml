@@ -14,7 +14,7 @@ metadata:
     app.kubernetes.io/part-of: kubecenter
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "services", "configmaps", "secrets", "namespaces", "events"]
+    resources: ["pods", "pods/log", "services", "configmaps", "secrets", "namespaces", "events", "nodes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "replicasets"]

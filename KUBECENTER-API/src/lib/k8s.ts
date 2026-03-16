@@ -69,13 +69,26 @@ export const appsApi = clients.appsV1;
 export const networkingApi = clients.networkingV1;
 export const customObjectsApi = clients.customObjects;
 
-export const WATCH_NAMESPACES = (process.env.WATCH_NAMESPACES ?? "default")
+const RAW_WATCH_NAMESPACES = (process.env.WATCH_NAMESPACES ?? "default")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
 
+export const WATCH_ALL = RAW_WATCH_NAMESPACES.length === 1 && RAW_WATCH_NAMESPACES[0].toLowerCase() === "all";
+
+export let WATCH_NAMESPACES: string[] = WATCH_ALL ? [] : RAW_WATCH_NAMESPACES;
+
+export async function resolveNamespaces(): Promise<string[]> {
+  if (!WATCH_ALL) return WATCH_NAMESPACES;
+  const result = await coreApi.listNamespace();
+  WATCH_NAMESPACES = (result.items ?? [])
+    .map((ns) => ns.metadata?.name ?? "")
+    .filter((n) => n && !n.startsWith("kube-"));
+  return WATCH_NAMESPACES;
+}
+
 export const isNamespaceAllowed = (namespace: string): boolean =>
-  WATCH_NAMESPACES.includes(namespace);
+  WATCH_ALL || WATCH_NAMESPACES.includes(namespace);
 
 export const assertNamespaceAllowed = (namespace: string): void => {
   if (!isNamespaceAllowed(namespace)) {

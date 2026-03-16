@@ -7,10 +7,6 @@ export function middleware(request: NextRequest) {
   const apiPath = pathname.replace(/^\/api\/?/, "/");
   const target = new URL(`${apiPath}${search}`, dest);
 
-  // #region agent log
-  console.log(`[DBG71a9c3] middleware rewrite: ${pathname} → ${target.toString()} (INTERNAL_API_URL=${dest})`);
-  // #endregion
-
   return NextResponse.rewrite(target);
 }
 

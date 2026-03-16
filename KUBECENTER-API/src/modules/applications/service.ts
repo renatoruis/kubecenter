@@ -6,6 +6,7 @@ import {
   notFoundError,
   networkingApi,
   WATCH_NAMESPACES,
+  resolveNamespaces,
 } from "../../lib/k8s";
 import { getIngressRoutesForServices } from "../network/service";
 import { labelsMatchSelector, extractWorkloadRefs } from "../shared/selectors";
@@ -36,8 +37,9 @@ const getServicesForDeployment = (
 
 export const listApplications = async (): Promise<ApplicationListItem[]> => {
   const rows: ApplicationListItem[] = [];
+  const namespaceList = await resolveNamespaces();
 
-  for (const namespace of WATCH_NAMESPACES) {
+  for (const namespace of namespaceList) {
     const [deploymentResult, servicesResult] = await Promise.all([
       appsApi.listNamespacedDeployment({ namespace }),
       coreApi.listNamespacedService({ namespace }),

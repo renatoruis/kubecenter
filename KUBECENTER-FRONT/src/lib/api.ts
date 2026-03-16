@@ -51,20 +51,10 @@ export async function apiGet<T>(
 ): Promise<T> {
   const url = buildUrl(path, params);
 
-  // #region agent log
-  console.log(`[DBG71a9c3] apiGet path="${path}" url="${url}" API_PREFIX="${API_PREFIX}"`);
-  // #endregion
-
   const res = await fetch(url, {
     headers: getHeaders(),
     cache: "no-store",
   });
-
-  // #region agent log
-  const _ct = res.headers.get('content-type') || '';
-  const _bodySnip = !res.ok || !_ct.includes('json') ? await res.clone().text().then(t=>t.substring(0,300)).catch(()=>'') : '';
-  console.log(`[DBG71a9c3] response url="${url}" status=${res.status} ok=${res.ok} redirected=${res.redirected} finalUrl="${res.url}" ct="${_ct}" bodySnip="${_bodySnip}"`);
-  // #endregion
 
   if (!res.ok) {
     let body: ApiError | undefined;

@@ -1,4 +1,4 @@
-import { appsApi, assertNamespaceAllowed, coreApi, notFoundError, WATCH_NAMESPACES } from "../../lib/k8s";
+import { appsApi, assertNamespaceAllowed, coreApi, notFoundError, WATCH_NAMESPACES, resolveNamespaces } from "../../lib/k8s";
 import { getDeploymentSelector, labelsMatchSelector } from "../shared/selectors";
 
 type ListPodsFilters = {
@@ -12,7 +12,7 @@ const sumRestarts = (
   statuses.reduce((total, status) => total + (status.restartCount ?? 0), 0);
 
 export const listPods = async ({ namespace, app }: ListPodsFilters) => {
-  const targetNamespaces = namespace ? [namespace] : WATCH_NAMESPACES;
+  const targetNamespaces = namespace ? [namespace] : await resolveNamespaces();
 
   if (namespace) {
     assertNamespaceAllowed(namespace);

@@ -1,4 +1,4 @@
-import { appsApi, coreApi, WATCH_NAMESPACES } from "../../lib/k8s";
+import { appsApi, coreApi, WATCH_NAMESPACES, resolveNamespaces } from "../../lib/k8s";
 
 interface NodeSummary {
   name: string;
@@ -53,9 +53,11 @@ function getNodeStatus(node: any): NodeSummary["status"] {
 }
 
 export async function getClusterOverview(): Promise<ClusterOverview> {
+  const namespaceList = await resolveNamespaces();
+
   const [nodesResult, ...nsResults] = await Promise.all([
-    coreApi.listNode(),
-    ...WATCH_NAMESPACES.map((ns) =>
+    coreApi.listNode().catch(() => ({ items: [] })),
+    ...namespaceList.map((ns) =>
       Promise.all([
         appsApi.listNamespacedDeployment({ namespace: ns }),
         coreApi.listNamespacedPod({ namespace: ns }),
@@ -76,7 +78,7 @@ export async function getClusterOverview(): Promise<ClusterOverview> {
     memory: node.status?.capacity?.["memory"] ?? "",
   }));
 
-  const namespaces: NamespaceSummary[] = WATCH_NAMESPACES.map((ns, i) => {
+  const namespaces: NamespaceSummary[] = namespaceList.map((ns, i) => {
     const [deployResult, podResult, , nsObj] = nsResults[i];
     const pods = podResult.items ?? [];
     return {
@@ -94,13 +96,13 @@ export async function getClusterOverview(): Promise<ClusterOverview> {
       pods: acc.pods + ns.pods,
       runningPods: acc.runningPods + ns.runningPods,
       services:
-        acc.services + (nsResults[WATCH_NAMESPACES.indexOf(ns.name)]?.[2]?.items?.length ?? 0),
+        acc.services + (nsResults[namespaceList.indexOf(ns.name)]?.[2]?.items?.length ?? 0),
     }),
     { deployments: 0, pods: 0, runningPods: 0, services: 0 },
   );
 
   return {
-    watchedNamespaces: WATCH_NAMESPACES,
+    watchedNamespaces: namespaceList,
     nodes: {
       total: nodes.length,
       ready: nodes.filter((n) => n.status === "Ready").length,
