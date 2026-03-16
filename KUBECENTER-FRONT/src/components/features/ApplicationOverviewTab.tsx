@@ -175,79 +175,127 @@ function Connector() {
 }
 
 function HpaSection({ hpa }: { hpa: HpaInfo }) {
-  const range = hpa.maxReplicas - hpa.minReplicas;
-  const currentPct = range > 0 ? ((hpa.currentReplicas - hpa.minReplicas) / range) * 100 : 0;
-  const desiredPct = range > 0 ? ((hpa.desiredReplicas - hpa.minReplicas) / range) * 100 : 0;
+  const range = hpa.maxReplicas - hpa.minReplicas || 1;
+  const slots = Array.from({ length: hpa.maxReplicas }, (_, i) => i);
 
   return (
     <Card title="Autoscaling (HPA)" icon={<ArrowUpDown className="h-4 w-4" />}>
-      <div className="space-y-5">
-        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-          <span className="font-mono">{hpa.name}</span>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-xs text-[var(--text-muted)]">{hpa.name}</span>
+          {hpa.currentReplicas !== hpa.desiredReplicas && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-400 ring-1 ring-amber-500/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Escalando para {hpa.desiredReplicas}
+            </span>
+          )}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-[var(--text-secondary)]">Réplicas</span>
-            <span className="tabular-nums text-[var(--text-muted)]">
-              {hpa.minReplicas} → <span className="text-[var(--text-primary)] font-semibold">{hpa.currentReplicas}</span> → {hpa.maxReplicas}
-            </span>
+            <div className="flex items-center gap-1.5 tabular-nums">
+              <span className="text-[var(--text-muted)]">Min {hpa.minReplicas}</span>
+              <span className="text-[var(--text-muted)]">·</span>
+              <span className="font-semibold text-[var(--text-primary)]">{hpa.currentReplicas} ativa{hpa.currentReplicas !== 1 ? "s" : ""}</span>
+              <span className="text-[var(--text-muted)]">·</span>
+              <span className="text-[var(--text-muted)]">Max {hpa.maxReplicas}</span>
+            </div>
           </div>
-          <div className="relative h-3 w-full rounded-full bg-slate-800 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-blue-500/20"
-              style={{ width: `${Math.min(Math.max(desiredPct, 0), 100)}%` }}
-            />
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-blue-500"
-              style={{ width: `${Math.min(Math.max(currentPct, 0), 100)}%` }}
-            />
+
+          <div className="flex items-center gap-1.5">
+            {slots.map((i) => {
+              const isActive = i < hpa.currentReplicas;
+              const isDesired = i < hpa.desiredReplicas && i >= hpa.currentReplicas;
+              const isMin = i < hpa.minReplicas;
+              return (
+                <div
+                  key={i}
+                  className={`relative h-8 flex-1 rounded-md transition-all ${
+                    isActive
+                      ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                      : isDesired
+                        ? "bg-amber-500/50 animate-pulse"
+                        : "bg-slate-800"
+                  }`}
+                  title={
+                    isActive ? `Réplica ${i + 1} (ativa)`
+                    : isDesired ? `Réplica ${i + 1} (escalando)`
+                    : `Réplica ${i + 1} (disponível)`
+                  }
+                >
+                  {isMin && !isActive && (
+                    <div className="absolute inset-0 rounded-md ring-1 ring-slate-600 ring-inset" />
+                  )}
+                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold tabular-nums text-white/70">
+                    {i + 1}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
-            <span>Min: {hpa.minReplicas}</span>
-            <span>Atual: {hpa.currentReplicas} · Desejado: {hpa.desiredReplicas}</span>
-            <span>Max: {hpa.maxReplicas}</span>
+
+          <div className="flex items-center gap-4 text-[10px] text-[var(--text-muted)]">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-emerald-500" /> Ativa</span>
+            {hpa.currentReplicas !== hpa.desiredReplicas && (
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-amber-500/50" /> Escalando</span>
+            )}
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-slate-800 ring-1 ring-slate-600" /> Disponível</span>
           </div>
         </div>
 
         {hpa.metrics.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {hpa.metrics.map((m, idx) => {
-              const label = m.name ? m.name.toUpperCase() : m.type;
-              const currentVal = m.currentAverageUtilization;
-              const targetVal = m.targetAverageUtilization;
-              const pct = targetVal && targetVal > 0 && currentVal != null
-                ? Math.min((currentVal / targetVal) * 100, 100)
-                : 0;
-              const barColor = currentVal != null && targetVal != null && currentVal >= targetVal
-                ? "bg-amber-500"
-                : "bg-emerald-500";
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Métricas de escala</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {hpa.metrics.map((m, idx) => {
+                const label = m.name === "cpu" ? "CPU" : m.name === "memory" ? "Memória" : (m.name ?? m.type).toUpperCase();
+                const currentVal = m.currentAverageUtilization;
+                const targetVal = m.targetAverageUtilization;
+                const ratio = targetVal && targetVal > 0 && currentVal != null ? currentVal / targetVal : 0;
+                const pct = Math.min(ratio * 100, 100);
+                const isOver = ratio >= 1;
+                const isNear = ratio >= 0.8 && ratio < 1;
 
-              return (
-                <div key={idx} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[var(--text-secondary)]">{label}</span>
-                    <span className="tabular-nums text-[var(--text-muted)]">
-                      {currentVal != null ? `${currentVal}%` : (m.currentAverageValue ?? "—")}
-                      {" / "}
-                      {targetVal != null ? `${targetVal}%` : (m.targetAverageValue ?? "—")}
-                    </span>
-                  </div>
-                  {targetVal != null && (
-                    <div className="relative h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${barColor}`}
-                        style={{ width: `${pct}%` }}
-                      />
+                return (
+                  <div key={idx} className={`rounded-[var(--radius-lg)] border p-4 space-y-3 ${
+                    isOver ? "border-amber-500/30 bg-amber-500/5" : "border-[var(--border-subtle)]"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-[var(--text-primary)]">{label}</span>
+                      {isOver && <span className="text-[10px] font-medium text-amber-400">ACIMA DO TARGET</span>}
                     </div>
-                  )}
-                  <div className="flex gap-4 text-[10px] text-[var(--text-muted)]">
-                    <span>Atual: {currentVal != null ? `${currentVal}%` : (m.currentAverageValue ?? "—")}</span>
-                    <span>Meta: {targetVal != null ? `${targetVal}%` : (m.targetAverageValue ?? "—")}</span>
+
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-2xl font-bold tabular-nums ${
+                        isOver ? "text-amber-400" : isNear ? "text-yellow-400" : "text-emerald-400"
+                      }`}>
+                        {currentVal != null ? `${currentVal}%` : (m.currentAverageValue ?? "—")}
+                      </span>
+                      <span className="text-sm text-[var(--text-muted)]">
+                        / {targetVal != null ? `${targetVal}%` : (m.targetAverageValue ?? "—")} target
+                      </span>
+                    </div>
+
+                    {targetVal != null && (
+                      <div className="relative h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isOver ? "bg-amber-500" : isNear ? "bg-yellow-500" : "bg-emerald-500"
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                        <div
+                          className="absolute top-0 h-full w-0.5 bg-white/40"
+                          style={{ left: "100%" }}
+                          title="Target"
+                        />
+                      </div>
+                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
