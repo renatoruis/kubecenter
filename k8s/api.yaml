@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubecenter-api
+  namespace: kubecenter
+  labels:
+    app: kubecenter-api
+    app.kubernetes.io/part-of: kubecenter
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubecenter-api
+  template:
+    metadata:
+      labels:
+        app: kubecenter-api
+        app.kubernetes.io/part-of: kubecenter
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: kubecenter
+      containers:
+        - name: api
+          image: ghcr.io/renatoruis/kubecenter-api:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: K8S_AUTH
+              value: "cluster"
+            - name: WATCH_NAMESPACES
+              value: "default"
+            - name: LOG_LEVEL
+              value: "info"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubecenter-api
+  namespace: kubecenter
+  labels:
+    app: kubecenter-api
+    app.kubernetes.io/part-of: kubecenter
+spec:
+  type: ClusterIP
+  selector:
+    app: kubecenter-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubecenter-front
+  namespace: kubecenter
+  labels:
+    app: kubecenter-front
+    app.kubernetes.io/part-of: kubecenter
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubecenter-front
+  template:
+    metadata:
+      labels:
+        app: kubecenter-front
+        app.kubernetes.io/part-of: kubecenter
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/renatoruis/kubecenter-front:latest
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "http://kubecenter-api:8080"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubecenter-front
+  namespace: kubecenter
+  labels:
+    app: kubecenter-front
+    app.kubernetes.io/part-of: kubecenter
+spec:
+  type: ClusterIP
+  selector:
+    app: kubecenter-front
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

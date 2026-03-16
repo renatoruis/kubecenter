@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.*
+kubeconfig.yaml
+*.kubeconfig
+.DS_Store
+coverage

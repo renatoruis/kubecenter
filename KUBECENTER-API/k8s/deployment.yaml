@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubecenter-api
+  namespace: default
+  labels:
+    app: kubecenter-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubecenter-api
+  template:
+    metadata:
+      labels:
+        app: kubecenter-api
+    spec:
+      serviceAccountName: kubecenter
+      containers:
+        - name: kubecenter-api
+          image: kubecenter/kubecenter-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: WATCH_NAMESPACES
+              value: "default"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

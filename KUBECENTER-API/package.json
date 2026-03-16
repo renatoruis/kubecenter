@@ -1,0 +1,36 @@
+{
+  "name": "kubecenter-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kubernetes infrastructure intelligence API",
+  "main": "dist/index.js",
+  "packageManager": "pnpm@10.7.0",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "dotenv -e .env -- tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.5",
+    "@kubernetes/client-node": "^1.4.0",
+    "fastify": "^5.6.1",
+    "fastify-plugin": "^5.1.0",
+    "mysql2": "^3.15.1",
+    "node-cache": "^5.1.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/pg": "^8.15.5",
+    "dotenv-cli": "^11.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
