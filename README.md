@@ -28,7 +28,7 @@ Plataforma de observabilidade Kubernetes read-only. Visualize deployments, pods,
 - Node.js 20+
 - pnpm 10+ (`npm i -g pnpm`)
 - Acesso a um cluster Kubernetes via kubeconfig
-- Metrics Server instalado no cluster (para métricas de CPU/memória)
+- Metrics Server instalado no cluster (veja [Requisitos do Cluster](#requisitos-do-cluster))
 
 ### 1. API
 
@@ -48,6 +48,47 @@ pnpm dev                # http://localhost:3001
 ```
 
 O frontend se conecta à API via `NEXT_PUBLIC_API_URL` (padrão: `http://localhost:3000`).
+
+## Requisitos do Cluster
+
+### Metrics Server (obrigatório)
+
+O KubeCenter utiliza a API `metrics.k8s.io` para exibir consumo de CPU e memória dos pods. Sem o Metrics Server, a seção de métricas exibirá "API de métricas não disponível".
+
+**Verificar se já está instalado:**
+
+```bash
+kubectl top nodes
+```
+
+Se o comando retornar métricas, o Metrics Server já está ativo. Caso contrário, instale:
+
+**Instalação:**
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+> **Clusters com certificados auto-assinados** (ex: Minikube, Kind, K3s, OKE): adicione o flag `--kubelet-insecure-tls` ao Deployment do Metrics Server:
+>
+> ```bash
+> kubectl patch deployment metrics-server -n kube-system \
+>   --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
+> ```
+
+> **Clusters gerenciados** (EKS, GKE, AKS): o Metrics Server geralmente já vem habilitado ou pode ser ativado pelo painel do provedor.
+
+**Verificar instalação:**
+
+```bash
+kubectl get deployment metrics-server -n kube-system
+kubectl top nodes
+kubectl top pods -n default
+```
+
+### Ingress Controller (opcional)
+
+Para acesso externo ao KubeCenter via domínio, é necessário um Ingress Controller. Manifests prontos para NGINX e Traefik estão em `k8s/`.
 
 ## Instalação Rápida
 
@@ -133,9 +174,10 @@ Edite os manifests conforme necessário antes de aplicar:
 
 O KubeCenter opera em modo **read-only**. O `ClusterRole` concede apenas `get`, `list` e `watch` nos seguintes recursos:
 
-- `pods`, `pods/log`, `services`, `configmaps`, `secrets`, `namespaces`, `events`
-- `deployments`, `statefulsets`, `replicasets`
+- `pods`, `pods/log`, `services`, `configmaps`, `secrets`, `namespaces`, `events`, `nodes`
+- `deployments`, `statefulsets`, `replicasets` (apps)
 - `ingresses` (networking.k8s.io)
+- `horizontalpodautoscalers` (autoscaling)
 - `pods`, `nodes` (metrics.k8s.io)
 - `ingressroutes` (traefik.io, traefik.containo.us)
 

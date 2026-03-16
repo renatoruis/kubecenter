@@ -112,12 +112,79 @@ const podsRoutes: FastifyPluginAsync = async (fastify) => {
             startTime: { type: "string", nullable: true },
             ip: { type: "string", nullable: true },
             qosClass: { type: "string", nullable: true },
-            conditions: { type: "array", items: { type: "object" } },
-            containers: { type: "array", items: { type: "object" } },
-            volumes: { type: "array", items: { type: "object" } },
-            events: { type: "array", items: { type: "object" } },
-            labels: { type: "object" },
-            annotations: { type: "object" },
+            conditions: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  type: { type: "string" },
+                  status: { type: "string" },
+                  lastTransitionTime: { type: "string", nullable: true },
+                  reason: { type: "string", nullable: true },
+                  message: { type: "string", nullable: true },
+                },
+              },
+            },
+            containers: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  name: { type: "string" },
+                  image: { type: "string" },
+                  ready: { type: "boolean" },
+                  restartCount: { type: "number" },
+                  state: { type: "string" },
+                  stateDetail: { type: "string", nullable: true },
+                  ports: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        containerPort: { type: "number" },
+                        protocol: { type: "string" },
+                      },
+                    },
+                  },
+                  resources: {
+                    type: "object",
+                    properties: {
+                      requests: { type: "object", additionalProperties: true },
+                      limits: { type: "object", additionalProperties: true },
+                    },
+                  },
+                },
+              },
+            },
+            volumes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  type: { type: "string" },
+                },
+              },
+            },
+            events: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: true,
+                properties: {
+                  type: { type: "string" },
+                  reason: { type: "string" },
+                  message: { type: "string" },
+                  count: { type: "number" },
+                  lastTimestamp: { type: "string", nullable: true },
+                  source: { type: "string" },
+                },
+              },
+            },
+            labels: { type: "object", additionalProperties: { type: "string" } },
+            annotations: { type: "object", additionalProperties: { type: "string" } },
           },
         },
         403: { $ref: "HttpError#" },

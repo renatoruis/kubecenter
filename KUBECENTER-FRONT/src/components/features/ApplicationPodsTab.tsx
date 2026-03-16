@@ -110,53 +110,112 @@ function PodDescribePanel({
       {/* Conditions */}
       {data.conditions.length > 0 && (
         <Card title="Conditions" icon={<Server className="h-4 w-4" />}>
-          <div className="flex flex-wrap gap-2">
-            {data.conditions.map((c, i) => (
-              <div key={i} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant={c.status === "True" ? "success" : "warning"} dot>{c.type}</Badge>
-                </div>
-                {c.reason && <p className="mt-1 text-[10px] text-[var(--text-muted)]">{c.reason}</p>}
-              </div>
-            ))}
+          <div className="overflow-x-auto -mx-5 -mb-5">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[var(--border)]">
+                  <th className="bg-slate-800/50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Condição</th>
+                  <th className="bg-slate-800/50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</th>
+                  <th className="bg-slate-800/50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Razão</th>
+                  <th className="bg-slate-800/50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Última transição</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.conditions.map((c, i) => (
+                  <tr key={i} className={`border-b border-[var(--border-subtle)] last:border-0 ${i % 2 === 1 ? "bg-[var(--bg-muted)]" : ""}`}>
+                    <td className="px-4 py-2.5 text-sm font-medium text-[var(--text-primary)]">{c.type}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant={c.status === "True" ? "success" : c.status === "False" ? "error" : "warning"} dot>
+                        {c.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-[var(--text-secondary)]">{c.reason || "—"}</td>
+                    <td className="px-4 py-2.5 text-xs tabular-nums text-[var(--text-muted)]">
+                      {c.lastTransitionTime ? <span title={c.lastTransitionTime}>{timeAgo(c.lastTransitionTime)}</span> : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
 
       {/* Containers */}
-      <Card title="Containers" icon={<Container className="h-4 w-4" />}>
-        <div className="space-y-3">
+      <Card title={`Containers (${data.containers.length})`} icon={<Container className="h-4 w-4" />}>
+        <div className="space-y-4">
           {data.containers.map((c) => (
-            <div key={c.name} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</span>
-                <Badge variant={c.ready ? "success" : "error"} dot>
-                  {c.state}
-                </Badge>
-                {c.restartCount > 0 && (
-                  <span className="text-xs text-amber-400">{c.restartCount} restarts</span>
+            <div key={c.name} className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] overflow-hidden">
+              <div className={`flex items-center justify-between px-4 py-3 ${c.ready ? "bg-emerald-500/5 border-b border-emerald-500/10" : "bg-red-500/5 border-b border-red-500/10"}`}>
+                <div className="flex items-center gap-2.5">
+                  <Container className={`h-4 w-4 ${c.ready ? "text-emerald-400" : "text-red-400"}`} />
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</span>
+                  <Badge variant={c.ready ? "success" : "error"} dot>{c.state}</Badge>
+                  {c.restartCount > 0 && (
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
+                      c.restartCount >= 10 ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400"
+                    }`}>
+                      {c.restartCount} {c.restartCount === 1 ? "restart" : "restarts"}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Imagem</p>
+                  <p className="font-mono text-xs text-[var(--text-secondary)] break-all">{c.image}</p>
+                </div>
+
+                {c.stateDetail && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Detalhe</p>
+                    <p className="text-xs text-amber-400">{c.stateDetail}</p>
+                  </div>
+                )}
+
+                {(c.ports?.length ?? 0) > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Portas</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.ports.map((p, pi) => (
+                        <span key={pi} className="inline-flex items-center rounded-md bg-slate-800 px-2 py-1 font-mono text-xs text-[var(--text-secondary)]">
+                          {p.containerPort}/{p.protocol}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(Object.keys(c.resources?.requests ?? {}).length > 0 || Object.keys(c.resources?.limits ?? {}).length > 0) && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Recursos</p>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-[var(--border-subtle)]">
+                            <th className="pr-6 pb-1.5 text-left font-medium text-[var(--text-muted)]"></th>
+                            <th className="pr-6 pb-1.5 text-left font-medium text-[var(--text-muted)]">CPU</th>
+                            <th className="pb-1.5 text-left font-medium text-[var(--text-muted)]">Memória</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-[var(--border-subtle)]">
+                            <td className="pr-6 py-1.5 font-medium text-[var(--text-secondary)]">Requests</td>
+                            <td className="pr-6 py-1.5 font-mono text-[var(--text-primary)]">{c.resources?.requests?.cpu || "—"}</td>
+                            <td className="py-1.5 font-mono text-[var(--text-primary)]">{c.resources?.requests?.memory || "—"}</td>
+                          </tr>
+                          <tr>
+                            <td className="pr-6 py-1.5 font-medium text-[var(--text-secondary)]">Limits</td>
+                            <td className="pr-6 py-1.5 font-mono text-[var(--text-primary)]">{c.resources?.limits?.cpu || "—"}</td>
+                            <td className="py-1.5 font-mono text-[var(--text-primary)]">{c.resources?.limits?.memory || "—"}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
               </div>
-              <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">{c.image}</p>
-              {c.stateDetail && (
-                <p className="mt-1 text-xs text-[var(--text-muted)]">{c.stateDetail}</p>
-              )}
-              {(Object.keys(c.resources?.requests ?? {}).length > 0 || Object.keys(c.resources?.limits ?? {}).length > 0) && (
-                <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
-                  <div className="rounded-[var(--radius-sm)] bg-slate-800/50 px-3 py-2">
-                    <span className="font-medium text-[var(--text-muted)]">Requests</span>
-                    <p className="mt-0.5 text-[var(--text-secondary)]">
-                      CPU: {c.resources?.requests?.cpu ?? "-"} · Mem: {c.resources?.requests?.memory ?? "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-[var(--radius-sm)] bg-slate-800/50 px-3 py-2">
-                    <span className="font-medium text-[var(--text-muted)]">Limits</span>
-                    <p className="mt-0.5 text-[var(--text-secondary)]">
-                      CPU: {c.resources?.limits?.cpu ?? "-"} · Mem: {c.resources?.limits?.memory ?? "-"}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -164,11 +223,24 @@ function PodDescribePanel({
 
       {/* Volumes */}
       {data.volumes.length > 0 && (
-        <Card title="Volumes" icon={<HardDrive className="h-4 w-4" />}>
-          <div className="flex flex-wrap gap-2">
-            {data.volumes.map((v, i) => (
-              <Badge key={i} variant="default">{v.name} ({v.type})</Badge>
-            ))}
+        <Card title={`Volumes (${data.volumes.length})`} icon={<HardDrive className="h-4 w-4" />}>
+          <div className="overflow-x-auto -mx-5 -mb-5">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[var(--border)]">
+                  <th className="bg-slate-800/50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Nome</th>
+                  <th className="bg-slate-800/50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Tipo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.volumes.map((v, i) => (
+                  <tr key={i} className={`border-b border-[var(--border-subtle)] last:border-0 ${i % 2 === 1 ? "bg-[var(--bg-muted)]" : ""}`}>
+                    <td className="px-4 py-2.5 text-sm font-medium text-[var(--text-primary)]">{v.name}</td>
+                    <td className="px-4 py-2.5"><Badge variant="default">{v.type}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
