@@ -15,8 +15,3 @@ spec:
       services:
         - name: kubecenter-front
           port: 3000
-    - match: Host(`kubecenter.example.com`) && PathPrefix(`/api`)
-      kind: Rule
-      services:
-        - name: kubecenter-api
-          port: 8080

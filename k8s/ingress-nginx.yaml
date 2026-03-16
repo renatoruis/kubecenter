@@ -21,10 +21,3 @@ spec:
                 name: kubecenter-front
                 port:
                   number: 3000
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: kubecenter-api
-                port:
-                  number: 8080

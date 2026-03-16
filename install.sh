@@ -295,7 +295,7 @@ spec:
             - containerPort: 3000
               name: http
           env:
-            - name: NEXT_PUBLIC_API_URL
+            - name: INTERNAL_API_URL
               value: "http://kubecenter-api:8080"
           readinessProbe:
             httpGet:
@@ -365,13 +365,6 @@ spec:
                 name: kubecenter-front
                 port:
                   number: 3000
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: kubecenter-api
-                port:
-                  number: 8080
 YAML
   success "Ingress NGINX criado → ${BOLD}http://${HOSTNAME}${RESET}"
 
@@ -394,11 +387,6 @@ spec:
       services:
         - name: kubecenter-front
           port: 3000
-    - match: Host(\`${HOSTNAME}\`) && PathPrefix(\`/api\`)
-      kind: Rule
-      services:
-        - name: kubecenter-api
-          port: 8080
 YAML
   success "IngressRoute Traefik criado → ${BOLD}http://${HOSTNAME}${RESET}"
 

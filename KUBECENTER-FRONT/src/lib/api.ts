@@ -1,7 +1,25 @@
 import type { ApiError } from "./types";
 
-const getBaseUrl = () =>
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_PREFIX = process.env.NEXT_PUBLIC_API_URL || "/api";
+
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): string {
+  const prefix = API_PREFIX.replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  let url = `${prefix}${normalizedPath}`;
+
+  if (params) {
+    const sp = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") sp.set(k, String(v));
+    });
+    const qs = sp.toString();
+    if (qs) url += `?${qs}`;
+  }
+  return url;
+}
 
 const getToken = () => process.env.NEXT_PUBLIC_API_TOKEN;
 
@@ -20,26 +38,20 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public body?: ApiError
+    public body?: ApiError,
   ) {
     super(message);
     this.name = "ApiClientError";
   }
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
-  const baseUrl = getBaseUrl().replace(/\/$/, "");
-  const url = new URL(path.startsWith("/") ? path : `/${path}`, baseUrl);
+export async function apiGet<T>(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<T> {
+  const url = buildUrl(path, params);
 
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== "") {
-        url.searchParams.set(key, String(value));
-      }
-    });
-  }
-
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     headers: getHeaders(),
     cache: "no-store",
   });
@@ -54,7 +66,7 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
     throw new ApiClientError(
       body?.message || res.statusText,
       res.status,
-      body
+      body,
     );
   }
 

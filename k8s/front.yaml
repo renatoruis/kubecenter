@@ -26,7 +26,7 @@ spec:
             - containerPort: 3000
               name: http
           env:
-            - name: NEXT_PUBLIC_API_URL
+            - name: INTERNAL_API_URL
               value: "http://kubecenter-api:8080"
           readinessProbe:
             httpGet:
