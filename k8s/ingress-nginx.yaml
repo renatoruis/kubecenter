@@ -10,6 +10,11 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 spec:
   ingressClassName: nginx
+  # Descomente para habilitar TLS:
+  # tls:
+  #   - hosts:
+  #       - kubecenter.example.com
+  #     secretName: kubecenter-tls
   rules:
     - host: kubecenter.example.com
       http:

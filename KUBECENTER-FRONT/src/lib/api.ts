@@ -7,8 +7,8 @@ function buildUrl(
   params?: Record<string, string | number | boolean | undefined>,
 ): string {
   const prefix = API_PREFIX.replace(/\/$/, "");
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  let url = `${prefix}${normalizedPath}`;
+  const clean = path.replace(/^\/+/, "");
+  let url = clean ? `${prefix}/${clean}` : prefix;
 
   if (params) {
     const sp = new URLSearchParams();

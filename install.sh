@@ -34,7 +34,7 @@ error()   { echo -e "  ${RED}✗${RESET} $1"; }
 step()    { echo -e "\n  ${BOLD}[$1/$TOTAL_STEPS]${RESET} $2\n"; }
 
 prompt() {
-  local var_name="$1" prompt_text="$2" default="$3"
+  local var_name="$1" prompt_text="$2" default="${3:-}"
   local input
   if [ -n "$default" ]; then
     echo -ne "  ${CYAN}?${RESET} ${prompt_text} ${DIM}(${default})${RESET}: " >/dev/tty
@@ -64,6 +64,19 @@ prompt_choice() {
   fi
 }
 
+prompt_yn() {
+  local var_name="$1" prompt_text="$2" default="${3:-y}"
+  local input
+  echo -ne "  ${CYAN}?${RESET} ${prompt_text} ${DIM}(${default})${RESET}: " >/dev/tty
+  read -r input </dev/tty
+  input="${input:-$default}"
+  if [[ "${input,,}" == "y" || "${input,,}" == "yes" ]]; then
+    eval "$var_name=true"
+  else
+    eval "$var_name=false"
+  fi
+}
+
 # ── Pre-flight ───────────────────────────────────────────
 
 print_banner
@@ -83,6 +96,44 @@ fi
 info "Cluster atual: ${BOLD}${KUBE_CONTEXT}${RESET}"
 echo ""
 
+# ── Check existing installation ──────────────────────────
+
+ALREADY_INSTALLED=false
+if kubectl get namespace "$NAMESPACE" &>/dev/null; then
+  ALREADY_INSTALLED=true
+  warn "KubeCenter já está instalado no namespace ${BOLD}${NAMESPACE}${RESET}"
+  echo ""
+
+  API_RUNNING=$(kubectl get deploy kubecenter-api -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+  FRONT_RUNNING=$(kubectl get deploy kubecenter-front -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+  API_IMG=$(kubectl get deploy kubecenter-api -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "?")
+  FRONT_IMG=$(kubectl get deploy kubecenter-front -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "?")
+
+  info "API:      ${BOLD}${API_RUNNING:-0}${RESET} replicas prontas  ${DIM}(${API_IMG})${RESET}"
+  info "Frontend: ${BOLD}${FRONT_RUNNING:-0}${RESET} replicas prontas  ${DIM}(${FRONT_IMG})${RESET}"
+  echo ""
+
+  prompt_choice EXISTING_ACTION "O que deseja fazer?" "Atualizar (reinstalar)" "Desinstalar" "Cancelar"
+
+  if [[ "$EXISTING_ACTION" == "Cancelar" ]]; then
+    info "Operação cancelada."
+    exit 0
+  fi
+
+  if [[ "$EXISTING_ACTION" == "Desinstalar" ]]; then
+    warn "Removendo KubeCenter..."
+    kubectl delete namespace "$NAMESPACE" --ignore-not-found 2>/dev/null
+    kubectl delete clusterrole kubecenter-readonly --ignore-not-found 2>/dev/null
+    kubectl delete clusterrolebinding kubecenter-readonly --ignore-not-found 2>/dev/null
+    success "KubeCenter desinstalado com sucesso."
+    echo ""
+    exit 0
+  fi
+
+  info "Continuando com a atualização..."
+  echo ""
+fi
+
 # ── Perguntas ────────────────────────────────────────────
 
 TOTAL_STEPS=5
@@ -90,8 +141,18 @@ TOTAL_STEPS=5
 prompt_choice INGRESS_TYPE "Qual ingress controller você usa?" "nginx" "traefik" "nenhum (só ClusterIP)"
 
 HOSTNAME=""
+TLS_SECRET=""
 if [[ "$INGRESS_TYPE" != "nenhum (só ClusterIP)" ]]; then
   prompt HOSTNAME "Hostname para acessar o KubeCenter" "kubecenter.example.com"
+
+  prompt_yn USE_TLS "Habilitar TLS/HTTPS?" "y"
+  if [[ "$USE_TLS" == "true" ]]; then
+    prompt TLS_SECRET "Nome do Secret com o certificado TLS (já existente no cluster)" ""
+    if [ -z "$TLS_SECRET" ]; then
+      warn "Nenhum secret informado — ingress será criado sem TLS."
+      USE_TLS=false
+    fi
+  fi
 fi
 
 prompt WATCH_NS "Namespaces para monitorar (separados por vírgula, ou 'all' para todos)" "default"
@@ -102,14 +163,20 @@ info "Namespace:      ${BOLD}${NAMESPACE}${RESET}"
 info "Ingress:        ${BOLD}${INGRESS_TYPE}${RESET}"
 if [ -n "$HOSTNAME" ]; then
   info "Hostname:       ${BOLD}${HOSTNAME}${RESET}"
+  if [[ "${USE_TLS:-false}" == "true" ]]; then
+    info "TLS Secret:     ${BOLD}${TLS_SECRET}${RESET}"
+  fi
 fi
 info "Watch NS:       ${BOLD}${WATCH_NS}${RESET}"
 info "API Image:      ${DIM}${API_IMAGE}${RESET}"
 info "Frontend Image: ${DIM}${FRONT_IMAGE}${RESET}"
+if [[ "$ALREADY_INSTALLED" == "true" ]]; then
+  info "Modo:           ${BOLD}Atualização${RESET}"
+fi
 echo ""
 
-prompt CONFIRM "Continuar com a instalação? (y/n)" "y"
-if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+prompt_yn CONFIRM "Continuar com a instalação?" "y"
+if [[ "$CONFIRM" != "true" ]]; then
   warn "Instalação cancelada."
   exit 0
 fi
@@ -341,6 +408,15 @@ success "Frontend Deployment + Service aplicados"
 step 5 "Configurando ingress"
 
 if [[ "$INGRESS_TYPE" == "nginx" ]]; then
+
+  TLS_BLOCK=""
+  if [[ "${USE_TLS:-false}" == "true" ]]; then
+    TLS_BLOCK="  tls:
+    - hosts:
+        - ${HOSTNAME}
+      secretName: ${TLS_SECRET}"
+  fi
+
   kubectl apply -f - <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -354,6 +430,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 spec:
   ingressClassName: nginx
+${TLS_BLOCK}
   rules:
     - host: ${HOSTNAME}
       http:
@@ -366,9 +443,23 @@ spec:
                 port:
                   number: 3000
 YAML
-  success "Ingress NGINX criado → ${BOLD}http://${HOSTNAME}${RESET}"
+
+  if [[ "${USE_TLS:-false}" == "true" ]]; then
+    success "Ingress NGINX criado → ${BOLD}https://${HOSTNAME}${RESET}"
+  else
+    success "Ingress NGINX criado → ${BOLD}http://${HOSTNAME}${RESET}"
+  fi
 
 elif [[ "$INGRESS_TYPE" == "traefik" ]]; then
+
+  TLS_BLOCK=""
+  ENTRY_POINTS="    - web
+    - websecure"
+  if [[ "${USE_TLS:-false}" == "true" ]]; then
+    TLS_BLOCK="  tls:
+    secretName: ${TLS_SECRET}"
+  fi
+
   kubectl apply -f - <<YAML
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -379,22 +470,26 @@ metadata:
     app.kubernetes.io/part-of: kubecenter
 spec:
   entryPoints:
-    - web
-    - websecure
+${ENTRY_POINTS}
   routes:
     - match: Host(\`${HOSTNAME}\`)
       kind: Rule
       services:
         - name: kubecenter-front
           port: 3000
+${TLS_BLOCK}
 YAML
-  success "IngressRoute Traefik criado → ${BOLD}http://${HOSTNAME}${RESET}"
+
+  if [[ "${USE_TLS:-false}" == "true" ]]; then
+    success "IngressRoute Traefik criado → ${BOLD}https://${HOSTNAME}${RESET}"
+  else
+    success "IngressRoute Traefik criado → ${BOLD}http://${HOSTNAME}${RESET}"
+  fi
 
 else
   warn "Sem ingress configurado. Use port-forward para acessar:"
   echo ""
   echo -e "    ${DIM}kubectl port-forward -n kubecenter svc/kubecenter-front 3000:3000${RESET}"
-  echo -e "    ${DIM}kubectl port-forward -n kubecenter svc/kubecenter-api 8080:8080${RESET}"
 fi
 
 # ── Resultado ────────────────────────────────────────────
@@ -416,7 +511,9 @@ echo -e "${GREEN}${BOLD}  ╚═════════════════
 echo ""
 
 if [ -n "$HOSTNAME" ]; then
-  info "Acesse: ${BOLD}http://${HOSTNAME}${RESET}"
+  PROTO="http"
+  [[ "${USE_TLS:-false}" == "true" ]] && PROTO="https"
+  info "Acesse: ${BOLD}${PROTO}://${HOSTNAME}${RESET}"
 fi
 info "Namespace: ${BOLD}kubectl get all -n kubecenter${RESET}"
 info "Logs API:  ${BOLD}kubectl logs -n kubecenter deploy/kubecenter-api -f${RESET}"
@@ -426,7 +523,6 @@ echo ""
 # ── Uninstall hint ───────────────────────────────────────
 
 echo -e "  ${DIM}Para desinstalar:${RESET}"
-echo -e "  ${DIM}  kubectl delete namespace kubecenter${RESET}"
-echo -e "  ${DIM}  kubectl delete clusterrole kubecenter-readonly${RESET}"
-echo -e "  ${DIM}  kubectl delete clusterrolebinding kubecenter-readonly${RESET}"
+echo -e "  ${DIM}  curl -fsSL https://raw.githubusercontent.com/renatoruis/kubecenter/main/install.sh | bash${RESET}"
+echo -e "  ${DIM}  (selecione \"Desinstalar\" quando detectar a instalação existente)${RESET}"
 echo ""
