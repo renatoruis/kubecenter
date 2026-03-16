@@ -70,11 +70,10 @@ prompt_yn() {
   echo -ne "  ${CYAN}?${RESET} ${prompt_text} ${DIM}(${default})${RESET}: " >/dev/tty
   read -r input </dev/tty
   input="${input:-$default}"
-  if [[ "${input,,}" == "y" || "${input,,}" == "yes" ]]; then
-    eval "$var_name=true"
-  else
-    eval "$var_name=false"
-  fi
+  case "$(printf '%s' "$input" | tr '[:upper:]' '[:lower:]')" in
+    y|yes) eval "$var_name=true" ;;
+    *)     eval "$var_name=false" ;;
+  esac
 }
 
 # ── Pre-flight ───────────────────────────────────────────
