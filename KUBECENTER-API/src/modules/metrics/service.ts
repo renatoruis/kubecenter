@@ -79,13 +79,14 @@ export async function getMetricsByApp(
     const body = (raw as { body?: { items?: unknown[] }; items?: unknown[] })?.body ?? raw;
     const items = (Array.isArray(body?.items) ? body.items : []) as PodMetricItem[];
 
-    const matched = items.filter((item: PodMetricItem) => getAppLabel(item.metadata?.labels) === app);
-    const podNames = matched.map((item: PodMetricItem) => item.metadata?.name).filter((n: string | undefined): n is string => Boolean(n));
-
     const deployment = await appsApi.readNamespacedDeployment({ namespace, name: app }).catch(() => null);
     const deploymentSelector = deployment ? getDeploymentSelector(deployment) : null;
 
-    const podList = podNames.length > 0
+    const matched = deploymentSelector
+      ? items.filter((item: PodMetricItem) => labelsMatchSelector(item.metadata?.labels ?? {}, deploymentSelector))
+      : items.filter((item: PodMetricItem) => getAppLabel(item.metadata?.labels) === app);
+
+    const podList = matched.length > 0
       ? await coreApi.listNamespacedPod({ namespace })
       : { items: [] };
     const podSpecs = new Map(
